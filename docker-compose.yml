@@ -1,0 +1,73 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: careplan
+      POSTGRES_USER: careplan
+      POSTGRES_PASSWORD: careplan123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgres://careplan:careplan123@db:5432/careplan
+      ANTHROPIC_API_KEY: s${ANTHROPIC_API_KEY}
+      REDIS_URL: redis://redis:6379/0
+      USE_MOCK_LLM: "true"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "echo 'Waiting for DB...' &&
+             until python -c 'import psycopg2; psycopg2.connect(host=\"db\", port=5432, user=\"careplan\", password=\"careplan123\", dbname=\"careplan\")' 2>/dev/null; do
+               echo 'DB not ready...'; sleep 2;
+             done &&
+             echo 'DB ready!' &&
+             python manage.py makemigrations careplan --noinput &&
+             python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  celery_worker:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://careplan:careplan123@db:5432/careplan
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      REDIS_URL: redis://redis:6379/0
+      USE_MOCK_LLM: "true"
+    depends_on:
+      - db
+      - redis
+      - backend
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "echo 'Waiting for DB...' &&
+             until python -c 'import psycopg2; psycopg2.connect(host=\"db\", port=5432, user=\"careplan\", password=\"careplan123\", dbname=\"careplan\")' 2>/dev/null; do
+               echo 'DB not ready...'; sleep 2;
+             done &&
+             echo 'Starting Celery Worker...' &&
+             celery -A config worker --loglevel=info"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

@@ -1,0 +1,416 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>CVS Care Plan Generator - MVP</title>
+    <style>
+      body {
+        font-family: Arial;
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 20px;
+      }
+      .form-group {
+        margin: 15px 0;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      button {
+        background: #c00;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+      }
+      button:disabled {
+        background: #999;
+      }
+      button.secondary {
+        background: #666;
+      }
+      .status {
+        padding: 10px;
+        margin: 10px 0;
+      }
+      .status.pending {
+        background: #fff3cd;
+      }
+      .status.processing {
+        background: #cce5ff;
+      }
+      .status.completed {
+        background: #d4edda;
+      }
+      .status.failed {
+        background: #f8d7da;
+      }
+      .careplan-section {
+        background: #f5f5f5;
+        padding: 15px;
+        margin: 10px 0;
+      }
+      .careplan-section h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+      }
+      h1 {
+        color: #c00;
+      }
+      hr {
+        margin: 30px 0;
+      }
+      #result {
+        margin-top: 20px;
+      }
+      .search-box {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+      .search-box input {
+        flex: 1;
+      }
+      .download-btn {
+        background: #28a745;
+        padding: 6px 12px;
+        font-size: 14px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background: #f5f5f5;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>CVS Care Plan Generator</h1>
+    <p>
+      MVP Version - Fill in the form, click generate, and wait for LLM response
+    </p>
+
+    <form id="careplanForm">
+      <h3>Patient Information</h3>
+      <div class="form-group">
+        <label>MRN (Medical Record Number)</label>
+        <input type="text" id="mrn" value="MRN001" required />
+      </div>
+      <div class="form-group">
+        <label>First Name</label>
+        <input type="text" id="firstName" value="John" required />
+      </div>
+      <div class="form-group">
+        <label>Last Name</label>
+        <input type="text" id="lastName" value="Smith" required />
+      </div>
+      <div class="form-group">
+        <label>Date of Birth</label>
+        <input type="date" id="dob" value="1965-03-15" required />
+      </div>
+
+      <h3>Provider Information</h3>
+      <div class="form-group">
+        <label>NPI (National Provider Identifier)</label>
+        <input type="text" id="npi" value="1234567890" required />
+      </div>
+      <div class="form-group">
+        <label>Provider Name</label>
+        <input
+          type="text"
+          id="providerName"
+          value="Dr. Sarah Johnson"
+          required
+        />
+      </div>
+
+      <h3>Order Information</h3>
+      <div class="form-group">
+        <label>Medication Name</label>
+        <input type="text" id="medication" value="Metformin 500mg" required />
+      </div>
+      <div class="form-group">
+        <label>Diagnosis</label>
+        <textarea id="diagnosis" rows="3" required>
+Type 2 Diabetes Mellitus, uncontrolled. HbA1c 8.5%. Patient reports increased thirst and frequent urination.</textarea
+        >
+      </div>
+
+      <button type="submit" id="submitBtn">Generate Care Plan</button>
+    </form>
+
+    <div id="result"></div>
+
+    <hr />
+
+    <h2>Search Care Plans</h2>
+    <div class="search-box">
+      <input
+        type="text"
+        id="searchInput"
+        placeholder="Search by patient name, MRN, or medication..."
+      />
+      <button type="button" onclick="searchCarePlans()">Search</button>
+      <button type="button" class="secondary" onclick="loadCarePlans()">
+        Show All
+      </button>
+    </div>
+
+    <h2>Recent Care Plans</h2>
+    <div id="careplanList"></div>
+
+    <script>
+      const API_BASE = "http://localhost:8000/api";
+      let lastGeneratedCareplanId = null;
+
+      document
+        .getElementById("careplanForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          const btn = document.getElementById("submitBtn");
+          const resultDiv = document.getElementById("result");
+
+          btn.disabled = true;
+          btn.textContent = "Submitting...";
+          resultDiv.innerHTML =
+            '<div class="status processing">Submitting request...</div>';
+
+          const payload = {
+            patient: {
+              mrn: document.getElementById("mrn").value,
+              first_name: document.getElementById("firstName").value,
+              last_name: document.getElementById("lastName").value,
+              dob: document.getElementById("dob").value,
+            },
+            provider: {
+              npi: document.getElementById("npi").value,
+              name: document.getElementById("providerName").value,
+            },
+            medication_name: document.getElementById("medication").value,
+            diagnosis: document.getElementById("diagnosis").value,
+          };
+
+          try {
+            const response = await fetch(`${API_BASE}/careplan/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+
+            const data = await response.json();
+
+            if (data.status === "pending") {
+              lastGeneratedCareplanId = data.careplan_id;
+              resultDiv.innerHTML = `
+                        <div class="status processing">⏳ Generating Care Plan (ID: ${data.careplan_id})...</div>
+                        <p>Please wait, this usually takes 10–30 seconds.</p>
+                    `;
+              startPolling(data.careplan_id);
+            } else if (data.status === "completed") {
+              lastGeneratedCareplanId = data.careplan_id;
+              resultDiv.innerHTML = `
+                        <div class="status completed">Status: Completed - Care Plan ID: ${data.careplan_id}</div>
+                        <button class="download-btn" onclick="downloadPDF(${data.careplan_id})">Download PDF</button>
+                        <div class="careplan-section">
+                            <h4>Problem List</h4>
+                            <p>${data.careplan.problem_list}</p>
+                        </div>
+                        <div class="careplan-section">
+                            <h4>Goals</h4>
+                            <p>${data.careplan.goals}</p>
+                        </div>
+                        <div class="careplan-section">
+                            <h4>Pharmacist Interventions</h4>
+                            <p>${data.careplan.pharmacist_interventions}</p>
+                        </div>
+                        <div class="careplan-section">
+                            <h4>Monitoring Plan</h4>
+                            <p>${data.careplan.monitoring_plan}</p>
+                        </div>
+                    `;
+            } else {
+              resultDiv.innerHTML = `
+                        <div class="status failed">Status: Failed</div>
+                        <p>Error: ${data.error || "Unknown error"}</p>
+                    `;
+            }
+          } catch (err) {
+            resultDiv.innerHTML = `
+                    <div class="status failed">Network Error</div>
+                    <p>${err.message}</p>
+                `;
+          }
+
+          btn.disabled = false;
+          btn.textContent = "Generate Care Plan";
+          loadCarePlans();
+        });
+
+      function downloadPDF(careplanId) {
+        window.open(`${API_BASE}/careplan/${careplanId}/download/`, "_blank");
+      }
+
+      async function searchCarePlans() {
+        const query = document.getElementById("searchInput").value.trim();
+        if (!query) {
+          loadCarePlans();
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `${API_BASE}/careplans/search/?q=${encodeURIComponent(query)}`,
+          );
+          const data = await response.json();
+          renderCarePlanList(data.careplans);
+        } catch (err) {
+          document.getElementById("careplanList").innerHTML =
+            "<p>Error searching care plans</p>";
+        }
+      }
+
+      function startPolling(careplanId) {
+        const intervals = [2, 2, 3, 3, 5, 5, 10, 10];
+        let attempt = 0;
+        const MAX_WAIT_MS = 120 * 1000;
+        const startTime = Data.now();
+        const resultDiv = document.getElementById("result");
+        let timer = null;
+
+        async function check() {
+          if (Data.now() - startTime > MAX_WAIT_MS) {
+            resultDiv.innerHTML = `
+                <div class="status failed">⚠️ Timeout</div>
+                <p>Generation took too long. Please check the list below or try again.</p>
+            `;
+            return;
+          }
+
+          try {
+            const response = await fetch(
+              `${API_BASE}/careplan/${careplanID}/status`,
+            );
+            const data = await response.json();
+
+            if (data.status === "completed") {
+              // 停止轮询，显示结果
+              resultDiv.innerHTML = `
+                    <div class="status completed">✅ Care Plan Ready! (ID: ${careplanId})</div>
+                    <button class="download-btn" onclick="downloadPDF(${careplanId})">⬇ Download PDF</button>
+                    <div class="careplan-section">
+                        <h4>Problem List</h4>
+                        <p>${data.content.problem_list}</p>
+                    </div>
+                    <div class="careplan-section">
+                        <h4>Goals</h4>
+                        <p>${data.content.goals}</p>
+                    </div>
+                    <div class="careplan-section">
+                        <h4>Pharmacist Interventions</h4>
+                        <p>${data.content.pharmacist_interventions}</p>
+                    </div>
+                    <div class="careplan-section">
+                        <h4>Monitoring Plan</h4>
+                        <p>${data.content.monitoring_plan}</p>
+                    </div>
+                `;
+              loadCarePlans(); // 刷新列表
+              return;
+            }
+            if (data.status === "failed") {
+              // 停止轮询，显示错误
+              resultDiv.innerHTML = `
+                    <div class="status failed">❌ Generation Failed</div>
+                    <p>${data.error_message || "Unknown error occurred."}</p>
+                `;
+              return; // 停止轮询
+            }
+
+            const elapsed = Math.round((Date.now() - startTime) / 1000);
+            resultDiv.innerHTML = `
+                <div class="status processing">⏳ Generating... (${elapsed}s elapsed, ID: ${careplanId})</div>
+                <p>Please wait, this usually takes 10–30 seconds.</p>
+            `;
+            const delay = (intervals[attempt] ?? 10) * 1000;
+            attempt++;
+            timer = setTimeout(check, delay);
+          } catch (err) {
+            // 网络错误不停止，继续重试
+            const delay = (intervals[attempt] ?? 10) * 1000;
+            attempt++;
+            timer = setTimeout(check, delay);
+          }
+        }
+
+        check();
+      }
+
+      document
+        .getElementById("searchInput")
+        .addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            searchCarePlans();
+          }
+        });
+
+      async function loadCarePlans() {
+        try {
+          const response = await fetch(`${API_BASE}/careplans/`);
+          const data = await response.json();
+          renderCarePlanList(data.careplans);
+        } catch (err) {
+          document.getElementById("careplanList").innerHTML =
+            "<p>Error loading care plans</p>";
+        }
+      }
+
+      function renderCarePlanList(careplans) {
+        const listDiv = document.getElementById("careplanList");
+        if (careplans.length === 0) {
+          listDiv.innerHTML = "<p>No care plans found.</p>";
+          return;
+        }
+
+        listDiv.innerHTML =
+          "<table>" +
+          "<tr><th>ID</th><th>Patient</th><th>Medication</th><th>Status</th><th>Created</th><th>Action</th></tr>" +
+          careplans
+            .map(
+              (cp) => `
+                    <tr>
+                        <td>${cp.id}</td>
+                        <td>${cp.patient_name}${cp.mrn ? ` (${cp.mrn})` : ""}</td>
+                        <td>${cp.medication}</td>
+                        <td><span class="status ${cp.status}">${cp.status}</span></td>
+                        <td>${new Date(cp.created_at).toLocaleString()}</td>
+                        <td>${cp.status === "completed" ? `<button class="download-btn" onclick="downloadPDF(${cp.id})">PDF</button>` : "-"}</td>
+                    </tr>
+                `,
+            )
+            .join("") +
+          "</table>";
+      }
+
+      loadCarePlans();
+    </script>
+  </body>
+</html>
