@@ -292,12 +292,12 @@ Type 2 Diabetes Mellitus, uncontrolled. HbA1c 8.5%. Patient reports increased th
         const intervals = [2, 2, 3, 3, 5, 5, 10, 10];
         let attempt = 0;
         const MAX_WAIT_MS = 120 * 1000;
-        const startTime = Data.now();
+        const startTime = Date.now();
         const resultDiv = document.getElementById("result");
         let timer = null;
 
         async function check() {
-          if (Data.now() - startTime > MAX_WAIT_MS) {
+          if (Date.now() - startTime > MAX_WAIT_MS) {
             resultDiv.innerHTML = `
                 <div class="status failed">⚠️ Timeout</div>
                 <p>Generation took too long. Please check the list below or try again.</p>
@@ -307,12 +307,11 @@ Type 2 Diabetes Mellitus, uncontrolled. HbA1c 8.5%. Patient reports increased th
 
           try {
             const response = await fetch(
-              `${API_BASE}/careplan/${careplanID}/status`,
+              `${API_BASE}/careplan/${careplanId}/status/`,
             );
             const data = await response.json();
 
             if (data.status === "completed") {
-              // 停止轮询，显示结果
               resultDiv.innerHTML = `
                     <div class="status completed">✅ Care Plan Ready! (ID: ${careplanId})</div>
                     <button class="download-btn" onclick="downloadPDF(${careplanId})">⬇ Download PDF</button>
@@ -337,7 +336,6 @@ Type 2 Diabetes Mellitus, uncontrolled. HbA1c 8.5%. Patient reports increased th
               return;
             }
             if (data.status === "failed") {
-              // 停止轮询，显示错误
               resultDiv.innerHTML = `
                     <div class="status failed">❌ Generation Failed</div>
                     <p>${data.error_message || "Unknown error occurred."}</p>
