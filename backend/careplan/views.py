@@ -9,8 +9,16 @@ from .exceptions import NotFoundError
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_order_and_generate_careplan(request):
-    data = json.loads(request.body)
-    order, careplan = services.create_careplan(data)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "type": "validation_error",
+                             "code": "invalid_json", "message": "Invalid JSON."}, status=400)
+    try:
+        order, careplan = services.create_careplan(data)
+    except KeyError as e:
+        return JsonResponse({"success": False, "type": "validation_error",
+                             "code": "missing_field", "message": f"Missing field: {e}"}, status=400)
     return JsonResponse(serializers.serialize_careplan_created(order, careplan))
 
 
