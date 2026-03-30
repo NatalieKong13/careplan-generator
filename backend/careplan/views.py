@@ -2,8 +2,9 @@ import json
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from . import services, serializers
+from . import services, serializers, adapters
 from .exceptions import NotFoundError
+import xml.etree.ElementTree as ET
 
 
 @csrf_exempt
@@ -21,6 +22,36 @@ def create_order_and_generate_careplan(request):
                              "code": "missing_field", "message": f"Missing field: {e}"}, status=400)
     return JsonResponse(serializers.serialize_careplan_created(order, careplan))
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def order_from_json(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "type": "validation_error",
+                             "code": "invalid_json", "message": "Invalid JSON."}, status=400)
+    try:
+        order_obj = adapters.from_clinic_json(data)
+        order, careplan = services.create_careplan_from_order(order_obj)
+    except KeyError as e:
+        return JsonResponse({"success": False, "type": "validation_error",
+                             "code": "missing_field", "message": f"Missing field: {e}"}, status=400)
+    return JsonResponse({"careplan_id": careplan.id}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def order_from_xml(request):
+    try:
+        order_obj = adapters.from_pharmacorp_xml(request.body)
+        order, careplan = services.create_careplan_from_order(order_obj)
+    except ET.ParseError:
+        return JsonResponse({"success": False, "type": "validation_error",
+                             "code": "invalid_xml", "message": "Invalid XML."}, status=400)
+    except KeyError as e:
+        return JsonResponse({"success": False, "type": "validation_error",
+                             "code": "missing_field", "message": f"Missing field: {e}"}, status=400)
+    return JsonResponse({"careplan_id": careplan.id}, status=201)
 
 @require_http_methods(["GET"])
 def get_careplan(request, careplan_id):

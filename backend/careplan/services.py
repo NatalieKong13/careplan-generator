@@ -7,39 +7,31 @@ from reportlab.lib.units import inch
 from .models import Patient, Provider, Order, CarePlan
 from .tasks import generate_careplan_task
 from .duplicate_detection import get_or_create_provider, get_or_create_patient, create_order as detect_create_order
+from .schemas import InternalOrder
+from .adapters import from_clinic_json, from_pharmacorp_xml
 
-def create_careplan(data):
+def create_careplan_from_order(order: InternalOrder):
+    """业务逻辑唯一入口，只认 InternalOrder"""
     patient, _ = get_or_create_patient(
-        first_name=data['patient']['first_name'],
-        last_name=data['patient']['last_name'],
-        mrn=data['patient']['mrn'],
-        dob=data['patient']['dob'],
+        first_name=order.patient.first_name,
+        last_name=order.patient.last_name,
+        mrn=order.patient.mrn,
+        dob=order.patient.dob,
     )
-
     provider = get_or_create_provider(
-        name=data['provider']['name'],
-        npi=data['provider']['npi'],
+        name=order.provider.name,
+        npi=order.provider.npi,
     )
-
-    confirm = data.get('confirm', False)
-    order, _ = detect_create_order(
+    result, _ = detect_create_order(
         patient=patient,
         provider=provider,
-        medication_name=data['medication_name'],
-        diagnosis=data['diagnosis'],
-        confirm=data.get('confirm', False),
+        medication_name=order.medication.name,
+        diagnosis=order.diagnoses,
+        confirm=order.confirm,
     )
-
-    order.diagnosis = data['diagnosis']
-    order.provider = provider
-    order.save()
-
-    careplan = CarePlan.objects.create(order=order, status='pending')
+    careplan = CarePlan.objects.create(order=result, status='pending')
     generate_careplan_task.delay(careplan.id)
-    print(f"[API] Celery task triggered for CarePlan {careplan.id}")
-
-    return order, careplan
-
+    return result, careplan
 
 def get_careplan(careplan_id):
     """获取单个 careplan，不存在返回 None"""

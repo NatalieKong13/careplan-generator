@@ -468,10 +468,6 @@ class TestCreateCareplanEndpoint:
         assert response.status_code in [400, 500]
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ERROR FORMAT TESTS — ensure all errors follow unified schema
-# ═════════════════════════════════════════════════════════════════════════════
-
 @pytest.mark.django_db
 class TestErrorResponseFormat:
 
