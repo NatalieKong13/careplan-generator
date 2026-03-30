@@ -9,5 +9,6 @@ urlpatterns = [
     path('careplans/', views.list_careplans, name='list_careplans'),
     path('careplans/search/', views.search_careplans, name='search_careplans'),
     path('careplan/json/', views.order_from_json, name='create_careplan_json'),
-    path('careplan/xml/', views.order_from_xml, name='create_careplan_xml'),
+    # path('careplan/xml/', views.order_from_xml, name='create_careplan_xml'),
+    path('careplan/medcenter/', views.order_from_medcenter),
 ]

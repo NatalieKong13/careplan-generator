@@ -31,26 +31,28 @@ def order_from_json(request):
         return JsonResponse({"success": False, "type": "validation_error",
                              "code": "invalid_json", "message": "Invalid JSON."}, status=400)
     try:
-        order_obj = adapters.from_clinic_json(data)
+        source = data.get("source", "CLINIC_B")        
+        adapter = adapters.get_adapter(source, data)  
+        order_obj = adapter.run()
         order, careplan = services.create_careplan_from_order(order_obj)
-    except KeyError as e:
+    except (KeyError, ValueError) as e:
         return JsonResponse({"success": False, "type": "validation_error",
-                             "code": "missing_field", "message": f"Missing field: {e}"}, status=400)
+                             "code": "missing_field", "message": str(e)}, status=400)
     return JsonResponse({"careplan_id": careplan.id}, status=201)
-
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def order_from_xml(request):
+def order_from_medcenter(request):
     try:
-        order_obj = adapters.from_pharmacorp_xml(request.body)
+        adapter = adapters.get_adapter("MEDCENTER", request.body)
+        order_obj = adapter.run()
         order, careplan = services.create_careplan_from_order(order_obj)
     except ET.ParseError:
         return JsonResponse({"success": False, "type": "validation_error",
                              "code": "invalid_xml", "message": "Invalid XML."}, status=400)
-    except KeyError as e:
+    except (KeyError, ValueError) as e:
         return JsonResponse({"success": False, "type": "validation_error",
-                             "code": "missing_field", "message": f"Missing field: {e}"}, status=400)
+                             "code": "missing_field", "message": str(e)}, status=400)
     return JsonResponse({"careplan_id": careplan.id}, status=201)
 
 @require_http_methods(["GET"])

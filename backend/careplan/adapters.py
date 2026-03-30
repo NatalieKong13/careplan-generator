@@ -142,3 +142,109 @@ def from_pharmacorp_xml(xml_body: bytes) -> InternalOrder:
         diagnoses=diagnoses,
         clinical_notes=root.findtext("ClinicalDocumentation/NarrativeText"),
     )
+
+
+class MedCenterAdapter(BaseIntakeAdapter):
+    """
+    处理 MedCenter Hospital 发来的 XML 格式数据。
+    raw_data 是 XML bytes。
+    """
+
+    def parse(self):
+        root = ET.fromstring(self.raw_data)
+
+        # 提取所有诊断 code
+        diagnoses = []
+        main = root.find("ConditionList/MainCondition")
+        if main is not None:
+            diagnoses.append(main.get("code"))  # 注意：code 是 XML attribute 不是 text！
+        for cond in root.findall("ConditionList/AdditionalConditions/Condition"):
+            diagnoses.append(cond.get("code"))
+
+        # 提取过敏信息
+        allergies = [
+            item.text
+            for item in root.findall("PatientAllergies/AllergyItem")
+        ]
+
+        self._parsed = {
+            "mrn":            root.find("SubjectOfCare/ChartNumber").text,
+            "first_name":     root.find("SubjectOfCare/LegalName/Given").text,
+            "last_name":      root.find("SubjectOfCare/LegalName/Family").text,
+            "dob":            root.find("SubjectOfCare/BirthDate").text,
+            "gender":         root.findtext("SubjectOfCare/BiologicalSex"),
+            "weight_kg":      root.findtext("SubjectOfCare/MassKg"),
+            "provider_name":  root.find("ReferringPhysician/DisplayName").text,
+            "npi":            root.find("ReferringPhysician/ProviderID").text,
+            "facility":       root.findtext("ReferringPhysician/Department"),
+            "med_name":       root.find("TherapyOrder/ProductName").text,
+            "ndc":            root.findtext("TherapyOrder/ProductCode"),
+            "dosage":         root.findtext("TherapyOrder/DoseAmount"),
+            "frequency":      root.findtext("TherapyOrder/Schedule"),
+            "diagnoses":      diagnoses,
+            "allergies":      allergies,
+            "clinical_notes": root.findtext("ClinicalSummary"),
+            "_raw":           self.raw_data,  # 保留原始数据
+        }
+
+    def validate(self) -> None:
+        required = ["mrn", "first_name", "last_name", "dob", "provider_name", "npi", "med_name"]
+        for field in required:
+            if not self._parsed.get(field):
+                raise ValueError(f"缺少必填字段: {field}")
+
+        parse_date(self._parsed["dob"])
+
+        npi = self._parsed["npi"]
+        if not npi.isdigit() or len(npi) != 10:
+            raise ValueError(f"NPI 格式不正确: {npi}")
+
+    def transform(self) -> InternalOrder:
+        p = self._parsed
+        return InternalOrder(
+            source="MEDCENTER",
+            patient=PatientInfo(
+                mrn=p["mrn"],
+                first_name=p["first_name"],
+                last_name=p["last_name"],
+                dob=parse_date(p["dob"]),
+                gender=p["gender"],
+                weight_kg=float(p["weight_kg"]) if p["weight_kg"] else None,
+            ),
+            provider=ProviderInfo(
+                name=p["provider_name"],
+                npi=p["npi"],
+                facility=p["facility"],
+            ),
+            medication=MedicationInfo(
+                name=p["med_name"],
+                ndc=p["ndc"],
+                dosage=p["dosage"],
+                frequency=p["frequency"],
+            ),
+            diagnoses=p["diagnoses"],
+            allergies=p["allergies"],
+            clinical_notes=p["clinical_notes"],
+        )
+    
+
+ADAPTER_REGISTRY = {
+    "CLINIC_B":   ClinicBAdapter,
+    "MEDCENTER":  MedCenterAdapter, 
+    # "PHARMACORP": PharmaCorpAdapter,   ← 下一步加
+    # "CVS":        CVSWebFormAdapter,   ← 下一步加
+}
+
+def get_adapter(source: str, raw_data) -> BaseIntakeAdapter:
+    """
+    根据来源返回对应的 Adapter 实例。
+
+    用法：
+        adapter = get_adapter("CLINIC_B", data)
+        order = adapter.run()
+    """
+    adapter_class = ADAPTER_REGISTRY.get(source.upper())
+    if adapter_class is None:
+        supported = list(ADAPTER_REGISTRY.keys())
+        raise ValueError(f"不支持的数据源: '{source}'，目前支持: {supported}")
+    return adapter_class(raw_data)
