@@ -15,8 +15,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'careplan.middleware.AppExceptionMiddleware',
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
@@ -52,3 +54,4 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 USE_MOCK_LLM = os.environ.get('USE_MOCK_LLM', 'false').lower() == 'true'
+

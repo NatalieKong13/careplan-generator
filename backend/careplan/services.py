@@ -6,33 +6,35 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import inch
 from .models import Patient, Provider, Order, CarePlan
 from .tasks import generate_careplan_task
-
+from .duplicate_detection import get_or_create_provider, get_or_create_patient, create_order as detect_create_order
 
 def create_careplan(data):
-    """接收前端数据，创建数据库记录，触发异步任务"""
-    patient, _ = Patient.objects.get_or_create(
+    patient, _ = get_or_create_patient(
+        first_name=data['patient']['first_name'],
+        last_name=data['patient']['last_name'],
         mrn=data['patient']['mrn'],
-        defaults={
-            'first_name': data['patient']['first_name'],
-            'last_name': data['patient']['last_name'],
-            'dob': data['patient']['dob'],
-        }
+        dob=data['patient']['dob'],
     )
 
-    provider, _ = Provider.objects.get_or_create(
+    provider = get_or_create_provider(
+        name=data['provider']['name'],
         npi=data['provider']['npi'],
-        defaults={'name': data['provider']['name']}
     )
 
-    order = Order.objects.create(
+    confirm = data.get('confirm', False)
+    order, _ = detect_create_order(
         patient=patient,
         provider=provider,
         medication_name=data['medication_name'],
         diagnosis=data['diagnosis'],
+        confirm=data.get('confirm', False),
     )
 
-    careplan = CarePlan.objects.create(order=order, status='pending')
+    order.diagnosis = data['diagnosis']
+    order.provider = provider
+    order.save()
 
+    careplan = CarePlan.objects.create(order=order, status='pending')
     generate_careplan_task.delay(careplan.id)
     print(f"[API] Celery task triggered for CarePlan {careplan.id}")
 

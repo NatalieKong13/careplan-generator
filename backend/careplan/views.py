@@ -3,6 +3,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from . import services, serializers
+from .exceptions import NotFoundError
 
 
 @csrf_exempt
@@ -17,7 +18,7 @@ def create_order_and_generate_careplan(request):
 def get_careplan(request, careplan_id):
     careplan = services.get_careplan(careplan_id)
     if careplan is None:
-        return JsonResponse({'error': 'Not found'}, status=404)
+        raise NotFoundError(f"Careplan {careplan_id} not found.")
     return JsonResponse(serializers.serialize_careplan_detail(careplan))
 
 
