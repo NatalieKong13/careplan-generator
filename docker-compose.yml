@@ -11,11 +11,15 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - careplan-network
 
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    networks:
+      - careplan-network
 
   backend:
     build: ./backend
@@ -40,6 +44,8 @@ services:
              python manage.py makemigrations careplan --noinput &&
              python manage.py migrate --noinput &&
              python manage.py runserver 0.0.0.0:8000"
+    networks:
+      - careplan-network
 
   celery_worker:
     build: ./backend
@@ -61,6 +67,8 @@ services:
              done &&
              echo 'Starting Celery Worker...' &&
              celery -A config worker --loglevel=info"
+    networks:
+      - careplan-network
 
   frontend:
     build: ./frontend
@@ -68,6 +76,34 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+    networks:
+      - careplan-network
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - backend
+    networks:
+      - careplan-network
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus
+    networks:
+      - careplan-network
 
 volumes:
   postgres_data:
+
+networks:
+  careplan-network:
+    driver: bridge
