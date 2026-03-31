@@ -23,9 +23,9 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgres://careplan:careplan123@db:5432/careplan
-      ANTHROPIC_API_KEY: s${ANTHROPIC_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       REDIS_URL: redis://redis:6379/0
-      USE_MOCK_LLM: "true"
+      USE_MOCK_LLM: "false"
     depends_on:
       - db
       - redis
@@ -47,7 +47,7 @@ services:
       DATABASE_URL: postgres://careplan:careplan123@db:5432/careplan
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       REDIS_URL: redis://redis:6379/0
-      USE_MOCK_LLM: "true"
+      USE_MOCK_LLM: "false"
     depends_on:
       - db
       - redis

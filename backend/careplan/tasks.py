@@ -7,7 +7,7 @@ Celery 会自动发现这个文件（因为 autodiscover_tasks）。
 import json
 from celery import shared_task
 from django.conf import settings
-import anthropic
+from .llm.factory import get_llm_service
 
 
 @shared_task(
@@ -135,8 +135,7 @@ def mock_llm_for_careplan(patient, medication_name, diagnosis):
 
 
 def real_llm_for_careplan(patient, medication_name, diagnosis):
-    """真实 LLM：调用 Anthropic Claude API"""
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    
 
     prompt = f"""You are a clinical pharmacist creating a care plan for a CVS pharmacy.
 
@@ -154,10 +153,6 @@ Respond ONLY with valid JSON, no other text:
     "monitoring_plan": "List parameters to monitor..."
 }}"""
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    return json.loads(response.content[0].text)
+    llm = get_llm_service()        # 工厂函数决定用哪个 LLM
+    response_text = llm.generate(prompt)  # 只调用 generate()，不知道底层是谁
+    return json.loads(response_text)

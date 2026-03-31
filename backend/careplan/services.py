@@ -9,6 +9,7 @@ from .tasks import generate_careplan_task
 from .duplicate_detection import get_or_create_provider, get_or_create_patient, create_order as detect_create_order
 from .schemas import InternalOrder
 from .adapters import from_clinic_json, from_pharmacorp_xml
+from .llm.factory import get_llm_service
 
 def create_careplan_from_order(order: InternalOrder):
     """业务逻辑唯一入口，只认 InternalOrder"""
@@ -69,7 +70,6 @@ def search_careplans(query):
 
 
 def generate_careplan_pdf(careplan):
-    """生成 PDF，返回 BytesIO buffer"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
     styles = getSampleStyleSheet()
